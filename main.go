@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"log"
 	"os"
 
@@ -34,7 +33,6 @@ var Db *gorm.DB
 
 func initDB() {
 	db, err := gorm.Open(postgres.Open(os.Getenv("DB_URL")), &gorm.Config{})
-
 	if err != nil {
 		log.Println("Failed to connect to database")
 		log.Fatal(err)
@@ -151,7 +149,5 @@ func main() {
 		register <- client
 	}))
 
-	addr := flag.String("addr", ":8080", "http service address")
-	flag.Parse()
-	app.Listen(*addr)
+	app.Listen(":8080")
 }
