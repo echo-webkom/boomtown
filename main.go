@@ -85,6 +85,9 @@ func runHub() {
 				return
 			}
 
+			log.Println("regCount:", regCount)
+			log.Println("waitCount:", waitCount)
+
 			message := message{
 				RegisterCount: regCount,
 				WaitlistCount: waitCount,
