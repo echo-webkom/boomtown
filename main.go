@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"log"
@@ -32,9 +33,7 @@ var unregister = make(chan *websocket.Conn)
 var Db *gorm.DB
 
 func initDB() {
-	db, err := gorm.Open(postgres.Open(os.Getenv("DB_URL")), &gorm.Config{
-		// Logger: logger.Default.LogMode(logger.Info),
-	})
+	db, err := gorm.Open(postgres.Open(os.Getenv("DB_URL")), &gorm.Config{})
 
 	if err != nil {
 		log.Println("Failed to connect to database")
@@ -43,15 +42,25 @@ func initDB() {
 	}
 
 	log.Println("Connected to database")
-	// db.Logger = db.Logger.LogMode(logger.Info)
-
-	// db.Exec("DROP TABLE IF EXISTS users CASCADE")
-
-	// log.Println("Migrating the schema...")
-	// db.AutoMigrate(&User{})
 
 	Db = db
+}
 
+func getCountByStatus(id string, status string) (int, error) {
+	var result *sql.Rows
+	var err error
+	result, err = Db.Raw("SELECT COUNT(*) FROM registration WHERE happening_id = ? AND status = ?", id, status).Rows()
+	if err != nil {
+		log.Println("DB error:", err)
+		return 0, err
+	}
+
+	var count int
+	for result.Next() {
+		result.Scan(&count)
+	}
+
+	return count, nil
 }
 
 func runHub() {
@@ -66,29 +75,27 @@ func runHub() {
 		case id := <-broadcast:
 			log.Println("message id:", id)
 
+			regCount, err := getCountByStatus(id, "registered")
+			if err != nil {
+				log.Println("DB error:", err)
+				return
+			}
+
+			waitCount, err := getCountByStatus(id, "waiting")
+			if err != nil {
+				log.Println("DB error:", err)
+				return
+			}
+
 			message := message{
-				RegisterCount: 2,
-				WaitlistCount: 1,
+				RegisterCount: regCount,
+				WaitlistCount: waitCount,
 			}
 
 			jsonMessage, err := json.Marshal(message)
 			if err != nil {
 				log.Println("json error:", err)
 			}
-
-			// TODO GET COUNT FROM DB
-			// Db.Exec("SELECT COUNT(*) FROM registrations WHERE happening_id = ?", id)
-			result, err := Db.Raw("SELECT COUNT(*) FROM registrations WHERE happening_id = ?", id).Rows()
-			if err != nil {
-				log.Println("DB error:", err)
-			}
-
-			var count int
-			for result.Next() {
-				result.Scan(&count)
-			}
-
-			log.Println("!!! count:", count)
 
 			for connection := range clients {
 				if clients[connection].HappeningID == id {
@@ -115,8 +122,6 @@ func main() {
 	app := fiber.New()
 
 	app.Use("/ws", func(c *fiber.Ctx) error {
-		// IsWebSocketUpgrade returns true if the client
-		// requested upgrade to the WebSocket protocol.
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)
 			return c.Next()
