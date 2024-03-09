@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
@@ -99,13 +100,17 @@ func runHub() {
 			}
 
 			for connection := range clients {
-				if clients[connection].HappeningID == id {
+				log.Println("client happening id:", clients[connection].HappeningID, id)
+				if strings.Compare(clients[connection].HappeningID, id) == 0 {
+					log.Println("sending message to client", clients[connection].HappeningID, id)
 					if err := connection.WriteMessage(websocket.TextMessage, []byte(jsonMessage)); err != nil {
 						log.Println("write error:", err)
 
 						unregister <- connection
 						connection.WriteMessage(websocket.CloseMessage, []byte{})
 						connection.Close()
+					} else {
+						log.Println("message sent")
 					}
 				}
 			}
@@ -139,6 +144,7 @@ func main() {
 
 	app.Get("/ws/:id", websocket.New(func(c *websocket.Conn) {
 		id := c.Params("id")
+		log.Println("ws id:", id)
 		defer func() {
 			unregister <- c
 			c.Close()
@@ -150,6 +156,15 @@ func main() {
 		}{c, id}
 
 		register <- client
+
+		for {
+			_, _, err := c.ReadMessage()
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Println("read error:", err)
+				return
+
+			}
+		}
 	}))
 
 	app.Listen(":8080")
